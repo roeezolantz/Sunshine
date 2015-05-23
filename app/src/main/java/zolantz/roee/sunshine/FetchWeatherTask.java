@@ -44,17 +44,46 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
     private final String LOG_TAG = this.getClass().getSimpleName();
 
+    //region Data Membres
+
     private asyncTaskUIMethods Callback;
     private Context context;
 
+    //endregion
+
+    //region Static code section
+
     /**
-     *
+     * This code section prevents other classes to create new FetchWeatherTask every time they want to execute it..
+     */
+    public static FetchWeatherTask weatherTask;
+
+    public static void runTaskInBackground(asyncTaskUIMethods callback, Context context) {
+        weatherTask = new FetchWeatherTask(callback, context);
+        weatherTask.getUpdatedWeather(false);
+    }
+
+    public static String[] runTaskAndWait(asyncTaskUIMethods callback, Context context) {
+        weatherTask = new FetchWeatherTask(callback, context);
+        return (weatherTask.getUpdatedWeather(true));
+    }
+
+    //endregion
+
+    //region Interfaces
+
+    /**
+     * This interface is to help the asynctask call UI functions when its done or being cancelled
      */
     public interface asyncTaskUIMethods {
         void updateUI(String[] results);
 
         void onFetchingCancelled(String errorText, Throwable cause);
     }
+
+    //endregion
+
+    //region Ctor
 
     /**
      * Inits the async task with all the needed things
@@ -65,6 +94,10 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         this.context = context;
         this.Callback = callback;
     }
+
+    //endregion
+
+    //region Access Methods (Getters and Setters) of FetchWeatherTask
 
     /**
      * @returns the calling callback of the asynctask
@@ -96,6 +129,10 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
     public void setContext(Context context) {
         this.context = context;
     }
+
+    //endregion
+
+    //region Internet Validation Methods
 
     /**
      * Checks if the device has an internet connection
@@ -130,7 +167,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
                 urlc.setConnectTimeout(1500);
                 urlc.connect();
 
-                if ((urlc.getResponseCode() == 204) && (urlc.getContentLength() == 0))
+                if ((urlc.getResponseCode() != 204) && (urlc.getContentLength() != 0))
                     return ("You are connected to internet connection but has no access.");
             } catch (IOException e) {
                 Log.e("Internet_Checking_Tag", "Error checking internet connection", e);
@@ -144,11 +181,10 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
     }
 
     /**
-     * Returns the weather array
-     * @return
+     *
+     * @returns the error string, "" if all ok
      */
-    public void getUpdatedWeather() {
-
+    private String performInternetChecksInAnotherThread() {
         String internetConnectionState = "";
 
         AsyncTask<Void, String, String> internetConnectionChecker = new AsyncTask() {
@@ -161,33 +197,62 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         };
 
         try {
+            Toast.makeText(this.getContext(), "Internet checking started", Toast.LENGTH_SHORT).show();
+
             internetConnectionState = internetConnectionChecker.execute().get();
+
+            Toast.makeText(this.getContext(), "Internet checking done", Toast.LENGTH_SHORT).show();
+
         } catch (InterruptedException e) {
             e.printStackTrace();
         } catch (ExecutionException e) {
             e.printStackTrace();
         }
 
-        // Checks if the device has internet
-        if (!internetConnectionState.equals(""))
-            this.getCallback().onFetchingCancelled(internetConnectionState, null);
-        else
-            performUpdateInAnotherTask();
+        return (internetConnectionState);
     }
+
+    //endregion
 
     /**
-     * Function that does the update, I took this out to this func to do a nice try catch system on all of this
+     * Returns the weather array
+     * @returns an array with all the weekly weather info
      */
-    private void performUpdateInAnotherTask() {
+    public String[] getUpdatedWeather(Boolean waitForReturnValue) {
 
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.getContext());
+        String internetState = "";//performInternetChecksInAnotherThread();
 
-        final String location = prefs.getString(
-                this.getContext().getResources().getString(R.string.pref_location_key, ""),
-                this.getContext().getResources().getString(R.string.pref_location_default, ""));
+        String[] returnValue = null;
 
-        this.execute(location);
+        // Checks if the device has internet
+        if (!internetState.equals(""))
+            this.getCallback().onFetchingCancelled(internetState, null);
+        else {
+
+            // Loads the preferences of the weather info before executing the task
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.getContext());
+
+            final String location = prefs.getString(
+                    this.getContext().getResources().getString(R.string.pref_location_key, ""),
+                    this.getContext().getResources().getString(R.string.pref_location_default, ""));
+
+            // Checks if the user wants to wait for the return value (async/nor)
+            if (waitForReturnValue) {
+                try {
+                    returnValue = this.execute(location).get();
+                } catch (Exception ex) {
+                    this.getCallback().onFetchingCancelled("Error while fetching the weather task", ex);
+                }
+            } else {
+                this.execute(location);
+            }
+        }
+
+        return (returnValue);
+        //performUpdateInAnotherTask();
     }
+
+    //region Weather Forecast Methods
 
     private String getWeatherForecastDataFromServer(String postalCode) throws NetworkErrorException {
 
@@ -402,6 +467,22 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         return resultStrs;
     }
 
+    //endregion
+
+    /**
+     * Function that does the update, I took this out to this func to do a nice try catch system on all of this
+     */
+    private void performUpdateInAnotherTask() {
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.getContext());
+
+        final String location = prefs.getString(
+                this.getContext().getResources().getString(R.string.pref_location_key, ""),
+                this.getContext().getResources().getString(R.string.pref_location_default, ""));
+
+        this.execute(location);
+    }
+
     @Override
     protected String[] doInBackground(String... params) {
 
@@ -410,13 +491,20 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
         try {
             // Should throw NetworkErrorException if there is no internet access
-            weatherForecast = getWeatherForecastDataFromServer(params[0]);
 
-            weatherForecastArray = getWeatherDataFromJson(weatherForecast, 7);
+            Thread.sleep(1000);
+            if (!isCancelled())
+                weatherForecast = getWeatherForecastDataFromServer(params[0]);
+            Thread.sleep(1000);
+
+            if (!isCancelled())
+                weatherForecastArray = getWeatherDataFromJson(weatherForecast, 7);
         } catch (NetworkErrorException e) {
             e.printStackTrace();
             // TODO : has to throw this exception to the fragment so he will know that there is no internet
         } catch (JSONException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
@@ -429,5 +517,11 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         if (result != null) {
             this.getCallback().updateUI(result);
         }
+    }
+
+    @Override
+    protected void onCancelled() {
+        super.onCancelled();
+        this.getCallback().onFetchingCancelled("", null);
     }
 }

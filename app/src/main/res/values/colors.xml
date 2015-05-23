@@ -2,7 +2,7 @@
 <resources>
 
     <color name="refresh_progress_1">#00ff00</color>
-    <color name="refresh_progress_2">#ffffff</color>
-    <color name="refresh_progress_3">#ff00ff</color>
+    <color name="refresh_progress_2">#ff05ffcb</color>
+    <color name="refresh_progress_3">#ff07a0ff</color>
 f
 </resources>

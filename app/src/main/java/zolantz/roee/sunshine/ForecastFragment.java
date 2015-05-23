@@ -4,7 +4,9 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Message;
 import android.os.SystemClock;
 import android.support.v4.app.Fragment;
 import android.support.v4.widget.SwipeRefreshLayout;
@@ -14,15 +16,21 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Interpolator;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
+
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.Callable;
 
 import javax.security.auth.callback.Callback;
+
+import static android.view.View.OnClickListener;
 
 /**
  * A placeholder fragment containing a simple view.
@@ -30,8 +38,15 @@ import javax.security.auth.callback.Callback;
 public class ForecastFragment extends Fragment implements FetchWeatherTask.asyncTaskUIMethods {
 
     private static final String LOG_TAG = ForecastFragment.class.getSimpleName();
+
     private ArrayAdapter<String> mForecastAdapter;
     static SwipeRefreshLayout swipeLayout;
+    private ProgressBar loadingSpinner;
+    private ProgressDialog prgLoading;
+
+    long startingTime;
+    long endTime;
+
     //private static WeatherManager weatherManager;
     private static FetchWeatherTask weatherMachine;
 
@@ -51,21 +66,30 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
 
             @Override
             public void onRefresh() {
-                asyncUpdateWeather();
+                updateWeather(true);
             }
         });
 
-        asyncUpdateWeather();
+        // Gets the new weather info from the server asynchronic
+        updateWeather(true);
     }
 
     /**
      * This method invokes the async task that updates the weather info by creating a new one every time
      */
-    public void asyncUpdateWeather() {
+    public void updateWeather(Boolean asyncOrNor) {
 
         // Creates a new async task because every async task can be invoked once.
-        weatherMachine = new FetchWeatherTask(this, getActivity());
+        /*weatherMachine = new FetchWeatherTask(this, getActivity());
         weatherMachine.getUpdatedWeather();
+        */
+        getActivity().findViewById(R.id.txtReloadLabel).setVisibility(View.GONE);
+        startingTime = SystemClock.currentThreadTimeMillis();
+
+        if (asyncOrNor)
+            FetchWeatherTask.runTaskInBackground(this, this.getActivity());
+        else
+            FetchWeatherTask.runTaskAndWait(this, this.getActivity());
     }
 
     @Override
@@ -90,6 +114,30 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
                         new ArrayList<String>());
 
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
+
+        // Inits the loading spinner at the first time after the activity creates
+        loadingSpinner = (ProgressBar)rootView.findViewById(R.id.progressBar1);
+
+        // Restarts the loading spinner
+        loadingSpinner.setVisibility(View.VISIBLE);
+
+        prgLoading = new ProgressDialog(this.getActivity(), 0);
+        prgLoading.setTitle("Loading");
+        prgLoading.setMessage("Retriving weather forecast information from the server...");
+        prgLoading.setCancelable(true);
+        prgLoading.setOnCancelListener(new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface dialog) {
+                if (FetchWeatherTask.weatherTask.getStatus() != AsyncTask.Status.FINISHED) {
+                    FetchWeatherTask.weatherTask.cancel(true);
+                    Toast.makeText(getActivity(), "Cancelled", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        prgLoading.setProgressPercentFormat(NumberFormat.getPercentInstance());
+        prgLoading.setCanceledOnTouchOutside(false);
+
+        prgLoading.show();
 
         ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
         listView.setAdapter(mForecastAdapter);
@@ -117,7 +165,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         int id = item.getItemId();
 
         if (id == R.id.action_refresh) {
-            this.asyncUpdateWeather();
+            this.updateWeather(true);
             return true;
         } else if (id == R.id.action_settings) {
             return true;
@@ -126,9 +174,66 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         return super.onOptionsItemSelected(item);
     }
 
-    public void updateUI(String[] forecast, Boolean hasToShowLoadingMenu) {
+    public void updateUI(String[] forecast) {
 
-        ProgressDialog prg = null;
+        // Diasbles the loading spinner because the loading has finished
+        loadingSpinner.setVisibility(View.GONE);
+        prgLoading.cancel();
+
+        // Clears the forecast listview
+        mForecastAdapter.clear();
+        mForecastAdapter.addAll(Arrays.asList(forecast));
+
+        endTime = SystemClock.currentThreadTimeMillis();
+        Toast.makeText(getActivity(), "Forecast updated! " + (endTime - startingTime) + " millis", Toast.LENGTH_SHORT).show();
+
+        swipeLayout.setRefreshing(false);
+    }
+
+    @Override
+    public void onFetchingCancelled(String errorText, Throwable cause) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this.getActivity());
+
+        swipeLayout.setRefreshing(false);
+
+        if (loadingSpinner.getVisibility() == View.VISIBLE) {
+
+            loadingSpinner.setVisibility(View.GONE);
+            getActivity().findViewById(R.id.txtReloadLabel).setVisibility(View.VISIBLE);
+
+            final FetchWeatherTask.asyncTaskUIMethods callback = this;
+
+            // Turns the loading spinner into a button to reload
+            this.getActivity().findViewById(R.id.txtReloadLabel).setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    loadingSpinner.setVisibility(View.VISIBLE);
+                    updateWeather(true);
+                }
+            });
+        }
+
+
+        // Checks if the cancel was because the user or nor
+        if (errorText != "") {
+            builder.setTitle("התרחשה שגיאה")
+                    .setMessage(errorText)
+                    .setPositiveButton("נסה שנית", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            dialog.cancel();
+                            updateWeather(true);
+                        }
+                    })
+                    .setCancelable(true)
+                    .show();
+        }
+    }
+}
+
+/*ProgressDialog prg = null;
+
+        , Boolean hasToShowLoadingMenu
 
         // Checks if a loading menu is needed
         if (hasToShowLoadingMenu) {
@@ -138,37 +243,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
             prg.show();
         }
 
-        long startingTime = SystemClock.currentThreadTimeMillis();
-
-        mForecastAdapter.clear();
-        mForecastAdapter.addAll(Arrays.asList(forecast));
-
-        long endTime = SystemClock.currentThreadTimeMillis();
-        Toast.makeText(getActivity(), "Forecast updated! " + (endTime - startingTime) + " millis", Toast.LENGTH_SHORT).show();
-
         // Checks if has to cancel the loading dialog
         if (hasToShowLoadingMenu)
             prg.cancel();
-        else
-            swipeLayout.setRefreshing(false);
-    }
-
-    @Override
-    public void onFetchingCancelled(String errorText, Throwable cause) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this.getActivity());
-
-        swipeLayout.setRefreshing(false);
-
-        builder.setTitle("התרחשה שגיאה")
-                .setMessage(errorText)
-                .setPositiveButton("נסה שנית", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.cancel();
-                        asyncUpdateWeather();
-                    }
-                })
-                .setCancelable(true)
-                .show();
-    }
-}
+*/
