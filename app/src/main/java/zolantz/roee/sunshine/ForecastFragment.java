@@ -66,23 +66,46 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
 
             @Override
             public void onRefresh() {
-                updateWeather(true);
+                updateWeather(true, false);
             }
         });
 
+        //this.prgLoading = new ProgressDialog(this.getActivity(), 0);
+
         // Gets the new weather info from the server asynchronic
-        updateWeather(true);
+        updateWeather(true, true);
     }
 
     /**
      * This method invokes the async task that updates the weather info by creating a new one every time
      */
-    public void updateWeather(Boolean asyncOrNor) {
+    public void updateWeather(Boolean asyncOrNor, Boolean turnLoadingDialog) {
 
         // Creates a new async task because every async task can be invoked once.
         /*weatherMachine = new FetchWeatherTask(this, getActivity());
         weatherMachine.getUpdatedWeather();
         */
+
+        if (turnLoadingDialog) {
+            prgLoading = new ProgressDialog(this.getActivity(), 0);
+            prgLoading.setTitle("Loading");
+            prgLoading.setMessage("Retriving weather forecast information from the server...");
+            prgLoading.setCancelable(true);
+            prgLoading.setOnCancelListener(new DialogInterface.OnCancelListener() {
+                @Override
+                public void onCancel(DialogInterface dialog) {
+                    if (FetchWeatherTask.weatherTask.getStatus() != AsyncTask.Status.FINISHED) {
+                        FetchWeatherTask.weatherTask.cancel(true);
+                        Toast.makeText(getActivity(), "Cancelled", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+            prgLoading.setProgressPercentFormat(NumberFormat.getPercentInstance());
+            prgLoading.setCanceledOnTouchOutside(false);
+
+            prgLoading.show();
+        }
+
         getActivity().findViewById(R.id.txtReloadLabel).setVisibility(View.GONE);
         startingTime = SystemClock.currentThreadTimeMillis();
 
@@ -121,24 +144,6 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         // Restarts the loading spinner
         loadingSpinner.setVisibility(View.VISIBLE);
 
-        prgLoading = new ProgressDialog(this.getActivity(), 0);
-        prgLoading.setTitle("Loading");
-        prgLoading.setMessage("Retriving weather forecast information from the server...");
-        prgLoading.setCancelable(true);
-        prgLoading.setOnCancelListener(new DialogInterface.OnCancelListener() {
-            @Override
-            public void onCancel(DialogInterface dialog) {
-                if (FetchWeatherTask.weatherTask.getStatus() != AsyncTask.Status.FINISHED) {
-                    FetchWeatherTask.weatherTask.cancel(true);
-                    Toast.makeText(getActivity(), "Cancelled", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-        prgLoading.setProgressPercentFormat(NumberFormat.getPercentInstance());
-        prgLoading.setCanceledOnTouchOutside(false);
-
-        prgLoading.show();
-
         ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
         listView.setAdapter(mForecastAdapter);
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -165,7 +170,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         int id = item.getItemId();
 
         if (id == R.id.action_refresh) {
-            this.updateWeather(true);
+            this.updateWeather(true, true);
             return true;
         } else if (id == R.id.action_settings) {
             return true;
@@ -208,7 +213,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
                 @Override
                 public void onClick(View v) {
                     loadingSpinner.setVisibility(View.VISIBLE);
-                    updateWeather(true);
+                    updateWeather(true, false);
                 }
             });
         }
@@ -222,7 +227,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             dialog.cancel();
-                            updateWeather(true);
+                            updateWeather(true, false);
                         }
                     })
                     .setCancelable(true)
