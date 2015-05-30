@@ -9,7 +9,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.test.AndroidTestCase;
-
 import zolantz.roee.sunshine.utils.PollingCheck;
 
 import java.util.Map;
