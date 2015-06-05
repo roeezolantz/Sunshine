@@ -33,14 +33,9 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.Vector;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import javax.security.auth.callback.Callback;
-
 import zolantz.roee.sunshine.data.WeatherContract;
 import zolantz.roee.sunshine.data.WeatherContract.*;
 
@@ -86,6 +81,8 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         void updateUI(String[] results);
 
         void onFetchingCancelled(String errorText, Throwable cause);
+
+        void startingToCheck(String checkName);
     }
 
     //endregion
@@ -197,16 +194,22 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         AsyncTask<Void, String, String> internetConnectionChecker = new AsyncTask() {
             @Override
             protected Object doInBackground(Object[] params) {
+
+                publishProgress(new String[] {"Checking internet connection"});
                 String internetConnectionState = hasInternetAccess();
 
                 return (internetConnectionState);
+            }
+
+            @Override
+            protected void onProgressUpdate(Object... values) {
+                getCallback().startingToCheck(values [0].toString());
             }
         };
 
         try {
             internetConnectionState = internetConnectionChecker.execute().get();
-
-            Toast.makeText(this.getContext(), "Internet checking done", Toast.LENGTH_SHORT).show();
+            //Toast.makeText(this.getContext(), "Internet checking done", Toast.LENGTH_SHORT).show();
 
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -224,6 +227,8 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
      * @returns an array with all the weekly weather info
      */
     public String[] getUpdatedWeather(Boolean waitForReturnValue) {
+
+        //this.getCallback().startingToCheck("Internet Connection varification");
 
         String internetState = performInternetChecksInAnotherThread();
 
@@ -665,9 +670,14 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
                 cVVector.add(weatherValues);
             }
 
+            int inserted = 0;
+
             // add to database
             if (cVVector.size() > 0) {
                 // Student: call bulkInsert to add the weatherEntries to the database here
+                ContentValues[] cvArray = new ContentValues[cVVector.size()];
+                cVVector.toArray(cvArray);
+                inserted = this.getContext().getContentResolver().bulkInsert(WeatherEntry.CONTENT_URI, cvArray);
             }
 
             // Sort order:  Ascending, by date.
@@ -726,10 +736,12 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
         try {
             // Should throw NetworkErrorException if there is no internet access
-
+            publishProgress(new String[] {"Retriving data from the server"});
             Thread.sleep(1000);
             if (!isCancelled())
                 weatherForecast = getWeatherForecastDataFromServer(params[0]);
+
+            publishProgress(new String[] {"Parsing weather data"});
             Thread.sleep(1000);
 
             if (!isCancelled())
@@ -758,5 +770,10 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
     protected void onCancelled() {
         super.onCancelled();
         this.getCallback().onFetchingCancelled("", null);
+    }
+
+    @Override
+    protected void onProgressUpdate(String[]... values) {
+        this.getCallback().startingToCheck(values[0][0]);
     }
 }

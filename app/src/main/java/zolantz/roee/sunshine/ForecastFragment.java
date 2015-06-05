@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Message;
@@ -17,18 +18,20 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Interpolator;
+import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.Toast;
-
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.concurrent.Callable;
-
 import javax.security.auth.callback.Callback;
+
+import cn.pedant.SweetAlert.SweetAlertDialog;
 
 import static android.view.View.OnClickListener;
 
@@ -104,6 +107,13 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
             prgLoading.setCanceledOnTouchOutside(false);
 
             prgLoading.show();
+
+            /*SweetAlertDialog pDialog = new SweetAlertDialog(this.getActivity(), SweetAlertDialog.PROGRESS_TYPE);
+            pDialog.getProgressHelper().setBarColor(Color.parseColor("#A5DC86"));
+            pDialog.setTitleText("Loading");
+            pDialog.setConfirmText("Tralala");
+            pDialog.setCancelable(true);
+            pDialog.show();*/
         }
 
         getActivity().findViewById(R.id.txtReloadLabel).setVisibility(View.GONE);
@@ -144,7 +154,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         // Restarts the loading spinner
         loadingSpinner.setVisibility(View.VISIBLE);
 
-        ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
+        final ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
         listView.setAdapter(mForecastAdapter);
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 
@@ -156,6 +166,21 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
                 startActivity(intent);
             }
         });
+
+        //TODO : Buggy!@#!@#@#$!%@#$%@$#%
+
+       /* listView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+            }
+
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+                int topRowVerticalPosition = (listView == null || listView.getChildCount() == 0) ?
+                        0 : listView.getChildAt(0).getTop();
+                swipeLayout.setEnabled((topRowVerticalPosition >= 0));
+            }
+        });*/
 
         return rootView;
     }
@@ -179,27 +204,74 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    public void onPause() {
+        super.onPause();
+
+        if ((prgLoading != null) && prgLoading.isShowing())
+            prgLoading.dismiss();
+        prgLoading = null;
+    }
+
+    /**
+     * Updates the UI with the asynctask information
+     * @param forecast
+     */
     public void updateUI(String[] forecast) {
 
-        // Diasbles the loading spinner because the loading has finished
-        loadingSpinner.setVisibility(View.GONE);
-        prgLoading.cancel();
+        // Checks if there were any screen oriantation changes
+        if (prgLoading != null) {
 
-        // Clears the forecast listview
-        mForecastAdapter.clear();
-        mForecastAdapter.addAll(Arrays.asList(forecast));
+            // Clears the forecast listview
+            mForecastAdapter.clear();
+            mForecastAdapter.addAll(Arrays.asList(forecast));
 
-        endTime = SystemClock.currentThreadTimeMillis();
-        Toast.makeText(getActivity(), "Forecast updated! " + (endTime - startingTime) + " millis", Toast.LENGTH_SHORT).show();
+            endTime = SystemClock.currentThreadTimeMillis();
+            //Toast.makeText(getActivity(), "Forecast updated! " + (endTime - startingTime) + " millis", Toast.LENGTH_SHORT).show();
 
-        swipeLayout.setRefreshing(false);
+            // Diasbles the loading spinner because the loading has finished
+            swipeLayout.setRefreshing(false);
+            loadingSpinner.setVisibility(View.GONE);
+            prgLoading.dismiss();
+        }
+    }
+
+    private enum loadingWays {
+        swipeLayout,
+        classicLoadingWindow,
+        sweetAlertsWindow
+    }
+
+    public void doSomeLoading(loadingWays loadingWay, Boolean loadingOrNot) {
+        switch (loadingWay) {
+            case swipeLayout :
+                if (loadingOrNot)
+                    swipeLayout.setRefreshing(true);
+                else
+                    swipeLayout.setRefreshing(false);
+            case classicLoadingWindow :
+                if (loadingOrNot)
+                    prgLoading.show();
+                else
+                    prgLoading.cancel();
+            default:
+                /*
+            case(loadingWays.classicLoadingWindow) {
+
+            }
+            case(loadingWays.sweetAlertsWindow) {
+
+            }*/
+        }
+
     }
 
     @Override
     public void onFetchingCancelled(String errorText, Throwable cause) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this.getActivity());
 
-        swipeLayout.setRefreshing(false);
+        doSomeLoading(loadingWays.swipeLayout, false);
+        //swipeLayout.setRefreshing(false);
 
         if (loadingSpinner.getVisibility() == View.VISIBLE) {
 
@@ -233,6 +305,11 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
                     .setCancelable(true)
                     .show();
         }
+    }
+
+    @Override
+    public void startingToCheck(String checkName) {
+        this.prgLoading.setMessage(checkName + " is in progress right now");
     }
 }
 

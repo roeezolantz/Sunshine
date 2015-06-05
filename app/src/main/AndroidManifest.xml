@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="zolantz.roee.sunshine" >
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -9,6 +10,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        tools:replace="android:icon,android:theme"
         android:theme="@style/AppTheme" >
         <activity
             android:name=".MainActivity"
@@ -39,5 +41,4 @@
             android:authorities="zolantz.roee.sunshine"
             android:name=".data.WeatherProvider" />
     </application>
-
 </manifest>
