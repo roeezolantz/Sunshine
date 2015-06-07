@@ -18,6 +18,23 @@
             android:entryValues="@array/pref_units_values"
             android:entries="@array/pref_units_options"/>
 
+        <SwitchPreference
+            android:title="Count by list/ By Numeric"
+            android:key="countingWay"
+            android:defaultValue="true"/>
+
+        <EditTextPreference
+            android:title="@string/pref_count_label"
+            android:key="count"
+            android:defaultValue="@string/pref_count_default"
+            android:inputType="numberDecimal"/>
+
+        <ListPreference
+            android:title="@string/pref_count_label"
+            android:key="@string/pref_count_key"
+            android:defaultValue="7"
+            android:entryValues="@array/days"
+            android:entries="@array/days"/>
 
     </PreferenceCategory>
 </PreferenceScreen>

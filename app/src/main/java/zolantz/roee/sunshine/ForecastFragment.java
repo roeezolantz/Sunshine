@@ -309,7 +309,10 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
 
     @Override
     public void startingToCheck(String checkName) {
-        this.prgLoading.setMessage(checkName + " is in progress right now");
+
+        // Checks if there were any screen oriantation changes
+        if (prgLoading != null)
+            this.prgLoading.setMessage(checkName);
     }
 }
 

@@ -192,6 +192,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         String internetConnectionState = "";
 
         AsyncTask<Void, String, String> internetConnectionChecker = new AsyncTask() {
+
             @Override
             protected Object doInBackground(Object[] params) {
 
@@ -203,7 +204,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
             @Override
             protected void onProgressUpdate(Object... values) {
-                getCallback().startingToCheck(values [0].toString());
+                getCallback().startingToCheck(values[0].toString());
             }
         };
 
@@ -230,7 +231,8 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
         //this.getCallback().startingToCheck("Internet Connection varification");
 
-        String internetState = performInternetChecksInAnotherThread();
+        String internetState = "";
+        //performInternetChecksInAnotherThread();
 
         String[] returnValue = null;
 
@@ -242,19 +244,29 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
             // Loads the preferences of the weather info before executing the task
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.getContext());
 
+            Boolean byList = prefs.getBoolean("countingWay", true);
+
             final String location = prefs.getString(
                     this.getContext().getResources().getString(R.string.pref_location_key, ""),
                     this.getContext().getResources().getString(R.string.pref_location_default, ""));
 
+            String key = this.getContext().getResources().getString(R.string.pref_count_key, "");
+            String count = this.getContext().getResources().getString(R.string.pref_count_default, "7");
+
+            if (!byList)
+                key = "count";
+
+            final String numOfDays = prefs.getString(key, count);
+
             // Checks if the user wants to wait for the return value (async/nor)
             if (waitForReturnValue) {
                 try {
-                    returnValue = this.execute(location).get();
+                    returnValue = this.execute(location, numOfDays).get();
                 } catch (Exception ex) {
                     this.getCallback().onFetchingCancelled("Error while fetching the weather task", ex);
                 }
             } else {
-                this.execute(location);
+                this.execute(location, numOfDays);
             }
         }
 
@@ -264,7 +276,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
     //region Weather Forecast Methods
 
-    private String getWeatherForecastDataFromServer(String postalCode) throws NetworkErrorException {
+    private String getWeatherForecastDataFromServer(String postalCode, int numOfDays) throws NetworkErrorException {
 
         // These two need to be declared outside the try/catch
         // so that they can be closed in the finally block.
@@ -276,7 +288,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
         String format = "json";
         String units = "metric";
-        int numDays = 14;
+        //int numDays = numOfDays;//14;
 
         try {
             // Construct the URL for the OpenWeatherMap query
@@ -294,7 +306,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
                     .appendQueryParameter(QUERY_PARAM, postalCode)
                     .appendQueryParameter(FORMAT_PARAM, format)
                     .appendQueryParameter(UNITS_PARAM, units)
-                    .appendQueryParameter(DAYS_PARAM, Integer.toString(numDays)).build();
+                    .appendQueryParameter(DAYS_PARAM, Integer.toString(numOfDays)).build();
 
             URL url = new URL(buildUri.toString());
 
@@ -617,6 +629,15 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
             dayTime = new Time();
 
             for(int i = 0; i < weatherArray.length(); i++) {
+
+                publishProgress(new String[] {"Parsing day " + (i + 1) + " of " + weatherArray.length()});
+
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
                 // These are the values that will be collected.
                 long dateTime;
                 double pressure;
@@ -670,6 +691,14 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
                 cVVector.add(weatherValues);
             }
 
+            publishProgress(new String[] {"Saving the weather info to the device's DB..."});
+
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
             int inserted = 0;
 
             // add to database
@@ -687,17 +716,20 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
             // Students: Uncomment the next lines to display what what you stored in the bulkInsert
 
-            Cursor cur = this.getContext().getContentResolver().query(weatherForLocationUri,
-                    null, null, null, sortOrder);
-
-            cVVector = new Vector<ContentValues>(cur.getCount());
-            if (cur.moveToFirst()) {
-                do {
-                    ContentValues cv = new ContentValues();
-                    DatabaseUtils.cursorRowToContentValues(cur, cv);
-                    cVVector.add(cv);
-                } while (cur.moveToNext());
-            }
+//            // Brings the forecast list from the DB after the insertion
+//            // TODO : Buggy code, this returns 12 objects instead of the wanted amount
+//            Cursor cur = this.getContext().getContentResolver().query(weatherForLocationUri,
+//                    null, null, null, sortOrder);
+//
+//            cVVector = new Vector<ContentValues>(Math.min(cur.getCount(), forecastJsonStr.split("day").length - 1));
+//
+//            if (cur.moveToFirst()) {
+//                do {
+//                    ContentValues cv = new ContentValues();
+//                    DatabaseUtils.cursorRowToContentValues(cur, cv);
+//                    cVVector.add(cv);
+//                } while (cur.moveToNext()); //&& cVVector.capacity() <= Json);
+//            }
 
             Log.d(LOG_TAG, "FetchWeatherTask Complete. " + cVVector.size() + " Inserted");
 
@@ -708,6 +740,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
             Log.e(LOG_TAG, e.getMessage(), e);
             e.printStackTrace();
         }
+
         return null;
     }
 
@@ -716,7 +749,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
     /**
      * Function that does the update, I took this out to this func to do a nice try catch system on all of this
      */
-    private void performUpdateInAnotherTask() {
+    /*private void performUpdateInAnotherTask() {
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.getContext());
 
@@ -725,9 +758,8 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
                 this.getContext().getResources().getString(R.string.pref_location_default, ""));
 
         this.execute(location);
-    }
+    }*/
 
-    @Override
     protected String[] doInBackground(String... params) {
 
         String[] weatherForecastArray = null;
@@ -737,21 +769,23 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
         try {
             // Should throw NetworkErrorException if there is no internet access
             publishProgress(new String[] {"Retriving data from the server"});
-            Thread.sleep(1000);
+            Thread.sleep(300);
             if (!isCancelled())
-                weatherForecast = getWeatherForecastDataFromServer(params[0]);
+                weatherForecast = getWeatherForecastDataFromServer(params[0], Integer.parseInt(params[1]));
 
             publishProgress(new String[] {"Parsing weather data"});
-            Thread.sleep(1000);
+            //Thread.sleep(300);
 
             if (!isCancelled())
                 weatherForecastArray = getWeatherDataFromJson(weatherForecast, locationQuery);
         } catch (NetworkErrorException e) {
-            e.printStackTrace();
+            this.getCallback().onFetchingCancelled(e.getMessage(), e.getCause());
             // TODO : has to throw this exception to the fragment so he will know that there is no internet
         } catch (JSONException e) {
+            this.getCallback().onFetchingCancelled(e.getMessage(), e.getCause());
             e.printStackTrace();
         } catch (InterruptedException e) {
+            this.getCallback().onFetchingCancelled(e.getMessage(), e.getCause());
             e.printStackTrace();
         }
 
