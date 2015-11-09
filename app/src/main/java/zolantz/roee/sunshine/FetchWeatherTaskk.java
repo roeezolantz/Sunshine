@@ -24,9 +24,11 @@ import android.preference.PreferenceManager;
 import android.text.format.Time;
 import android.util.Log;
 import android.widget.ArrayAdapter;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,7 +38,8 @@ import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Vector;
-import zolantz.roee.sunshine.data.WeatherContract.*;
+
+import zolantz.roee.sunshine.data.WeatherContract.WeatherEntry;
 
 public class FetchWeatherTaskk extends AsyncTask<String, Void, String[]> {
 

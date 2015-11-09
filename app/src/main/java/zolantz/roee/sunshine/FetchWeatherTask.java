@@ -1,31 +1,24 @@
 package zolantz.roee.sunshine;
 
 import android.accounts.NetworkErrorException;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Fragment;
-import android.app.ProgressDialog;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.SharedPreferences;
-import android.content.res.Resources;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.preference.PreferenceManager;
-import android.support.v4.widget.SwipeRefreshLayout;
 import android.text.format.Time;
 import android.util.Log;
-import android.widget.Toast;
+
 import org.apache.http.HttpStatus;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,8 +29,10 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
+
 import zolantz.roee.sunshine.data.WeatherContract;
-import zolantz.roee.sunshine.data.WeatherContract.*;
+import zolantz.roee.sunshine.data.WeatherContract.LocationEntry;
+import zolantz.roee.sunshine.data.WeatherContract.WeatherEntry;
 
 /**
  * Created by Roee on 03/05/2015.
@@ -246,6 +241,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 
             Boolean byList = prefs.getBoolean("countingWay", true);
 
+            // TODO : Got to do this section secured with Utility.getPreferred..
             final String location = prefs.getString(
                     this.getContext().getResources().getString(R.string.pref_location_key, ""),
                     this.getContext().getResources().getString(R.string.pref_location_default, ""));
@@ -724,7 +720,7 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
 //            Cursor cur = this.getContext().getContentResolver().query(weatherForLocationUri,
 //                    null, null, null, sortOrder);
 //
-//            cVVector = new Vector<ContentValues>(Math.min(cur.getCount(), forecastJsonStr.split("day").length - 1));
+
 //
 //            if (cur.moveToFirst()) {
 //                do {
