@@ -301,12 +301,15 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
             final String FORMAT_PARAM = "mode";
             final String UNITS_PARAM = "units";
             final String DAYS_PARAM = "cnt";
+            final String APPID_PARAM = "APPID";
 
             Uri buildUri = Uri.parse(FORECAST_BASE_URL).buildUpon()
                     .appendQueryParameter(QUERY_PARAM, postalCode)
                     .appendQueryParameter(FORMAT_PARAM, format)
                     .appendQueryParameter(UNITS_PARAM, units)
-                    .appendQueryParameter(DAYS_PARAM, Integer.toString(numOfDays)).build();
+                    .appendQueryParameter(DAYS_PARAM, Integer.toString(numOfDays))
+                    .appendQueryParameter(APPID_PARAM, BuildConfig.OPEN_WEATHER_MAP_API_KEY)
+                    .build();
 
             URL url = new URL(buildUri.toString());
 
@@ -773,11 +776,15 @@ public class FetchWeatherTask extends AsyncTask<String, String[], String[]> {
             if (!isCancelled())
                 weatherForecast = getWeatherForecastDataFromServer(params[0], Integer.parseInt(params[1]));
 
-            publishProgress(new String[] {"Parsing weather data"});
-            //Thread.sleep(300);
+            if (weatherForecast == null)
+                this.getCallback().onFetchingCancelled("Oops.. Couldn't get the weather forecast from the server.", null);
+            else {
+                publishProgress(new String[]{"Parsing weather data"});
+                //Thread.sleep(300);
 
-            if (!isCancelled())
-                weatherForecastArray = getWeatherDataFromJson(weatherForecast, locationQuery);
+                if (!isCancelled())
+                    weatherForecastArray = getWeatherDataFromJson(weatherForecast, locationQuery);
+            }
         } catch (NetworkErrorException e) {
             this.getCallback().onFetchingCancelled(e.getMessage(), e.getCause());
             // TODO : has to throw this exception to the fragment so he will know that there is no internet

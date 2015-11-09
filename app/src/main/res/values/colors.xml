@@ -4,5 +4,14 @@
     <color name="refresh_progress_1">#00ff00</color>
     <color name="refresh_progress_2">#ff05ffcb</color>
     <color name="refresh_progress_3">#ff07a0ff</color>
-f
+
+    <color name="white">#FFFFFF</color>
+    <color name="grey">#cccccc</color>
+    <color name="grey_700">#646464</color>
+    <color name="black">#000000</color>
+
+    <color name="sunshine_light_blue">#ff64c2f4</color>
+    <color name="sunshine_blue">#ff1ca8f4</color>
+    <color name="sunshine_dark_blue">#0288D1</color>
+
 </resources>

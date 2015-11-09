@@ -4,13 +4,18 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Message;
 import android.os.SystemClock;
 import android.support.v4.app.Fragment;
+import android.support.v4.content.CursorLoader;
+import android.support.v4.content.Loader;
 import android.support.v4.widget.SwipeRefreshLayout;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -32,6 +37,7 @@ import java.util.concurrent.Callable;
 import javax.security.auth.callback.Callback;
 
 import cn.pedant.SweetAlert.SweetAlertDialog;
+import zolantz.roee.sunshine.data.WeatherContract;
 
 import static android.view.View.OnClickListener;
 
@@ -42,7 +48,47 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
 
     private static final String LOG_TAG = ForecastFragment.class.getSimpleName();
 
-    private ArrayAdapter<String> mForecastAdapter;
+    private ForecastAdapter mForecastAdapter;
+
+    private ListView mListView;
+    private int mPosition = ListView.INVALID_POSITION;
+    private boolean mUseTodayLayout;
+
+    private static final String SELECTED_KEY = "selected_position";
+
+    private static final int FORECAST_LOADER = 0;
+    // For the forecast view we're showing only a small subset of the stored data.
+    // Specify the columns we need.
+    private static final String[] FORECAST_COLUMNS = {
+            // In this case the id needs to be fully qualified with a table name, since
+            // the content provider joins the location & weather tables in the background
+            // (both have an _id column)
+            // On the one hand, that's annoying.  On the other, you can search the weather table
+            // using the location set by the user, which is only in the Location table.
+            // So the convenience is worth it.
+            WeatherContract.WeatherEntry.TABLE_NAME + "." + WeatherContract.WeatherEntry._ID,
+            WeatherContract.WeatherEntry.COLUMN_DATE,
+            WeatherContract.WeatherEntry.COLUMN_SHORT_DESC,
+            WeatherContract.WeatherEntry.COLUMN_MAX_TEMP,
+            WeatherContract.WeatherEntry.COLUMN_MIN_TEMP,
+            WeatherContract.LocationEntry.COLUMN_LOCATION_SETTING,
+            WeatherContract.WeatherEntry.COLUMN_WEATHER_ID,
+            WeatherContract.LocationEntry.COLUMN_COORD_LAT,
+            WeatherContract.LocationEntry.COLUMN_COORD_LONG
+    };
+
+    // These indices are tied to FORECAST_COLUMNS.  If FORECAST_COLUMNS changes, these
+    // must change.
+    static final int COL_WEATHER_ID = 0;
+    static final int COL_WEATHER_DATE = 1;
+    static final int COL_WEATHER_DESC = 2;
+    static final int COL_WEATHER_MAX_TEMP = 3;
+    static final int COL_WEATHER_MIN_TEMP = 4;
+    static final int COL_LOCATION_SETTING = 5;
+    static final int COL_WEATHER_CONDITION_ID = 6;
+    static final int COL_COORD_LAT = 7;
+    static final int COL_COORD_LONG = 8;
+
     static SwipeRefreshLayout swipeLayout;
     private ProgressBar loadingSpinner;
     private ProgressDialog prgLoading;
@@ -84,11 +130,13 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
      */
     public void updateWeather(Boolean asyncOrNor, Boolean turnLoadingDialog) {
 
+        SunshineSyncAdapter.syncImmediately(getActivity());
+
         // Creates a new async task because every async task can be invoked once.
         /*weatherMachine = new FetchWeatherTask(this, getActivity());
         weatherMachine.getUpdatedWeather();
         */
-
+/*
         if (turnLoadingDialog) {
             prgLoading = new ProgressDialog(this.getActivity(), 0);
             prgLoading.setTitle("Loading");
@@ -108,12 +156,12 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
 
             prgLoading.show();
 
-            /*SweetAlertDialog pDialog = new SweetAlertDialog(this.getActivity(), SweetAlertDialog.PROGRESS_TYPE);
+            *//*SweetAlertDialog pDialog = new SweetAlertDialog(this.getActivity(), SweetAlertDialog.PROGRESS_TYPE);
             pDialog.getProgressHelper().setBarColor(Color.parseColor("#A5DC86"));
             pDialog.setTitleText("Loading");
             pDialog.setConfirmText("Tralala");
             pDialog.setCancelable(true);
-            pDialog.show();*/
+            pDialog.show();*//*
         }
 
         getActivity().findViewById(R.id.txtReloadLabel).setVisibility(View.GONE);
@@ -122,7 +170,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         if (asyncOrNor)
             FetchWeatherTask.runTaskInBackground(this, this.getActivity());
         else
-            FetchWeatherTask.runTaskAndWait(this, this.getActivity());
+            FetchWeatherTask.runTaskAndWait(this, this.getActivity());*/
     }
 
     @Override
@@ -135,7 +183,9 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
 
-        mForecastAdapter =
+        mForecastAdapter = new ForecastAdapter(getActivity(), null, 0);
+
+        /*mForecastAdapter =
                 new ArrayAdapter<String>(
                         // The current context (this fragment's parent activity
                         getActivity(),
@@ -144,7 +194,7 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
                         // ID of the textview to populate
                         R.id.list_item_forecast_textview,
                         // The data
-                        new ArrayList<String>());
+                        new ArrayList<String>());*/
 
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
 
@@ -154,33 +204,24 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         // Restarts the loading spinner
         loadingSpinner.setVisibility(View.VISIBLE);
 
-        final ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
-        listView.setAdapter(mForecastAdapter);
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        mListView = (ListView) rootView.findViewById(R.id.listview_forecast);
+        mListView.setAdapter(mForecastAdapter);
+        mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 
             @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                String forecast = mForecastAdapter.getItem(position);
-                Intent intent = new Intent(getActivity(), DetailsActivity.class)
-                        .putExtra(Intent.EXTRA_TEXT, forecast);
-                startActivity(intent);
+            public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
+                Cursor cursor = (Cursor) adapterView.getItemAtPosition(position);
+
+                if (cursor != null) {
+                    String locationSetting = Utility.getPreferredLocation(getActivity());
+                    Intent intent = new Intent(getActivity(), DetailActivity.class)
+                            .setData(WeatherContract.WeatherEntry.buildWeatherLocationWithDate(
+                                    locationSetting, cursor.getLong(COL_WEATHER_DATE)
+                            ));
+                    startActivity(intent);
+                }
             }
         });
-
-        //TODO : Buggy!@#!@#@#$!%@#$%@$#%
-
-       /* listView.setOnScrollListener(new AbsListView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(AbsListView view, int scrollState) {
-            }
-
-            @Override
-            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
-                int topRowVerticalPosition = (listView == null || listView.getChildCount() == 0) ?
-                        0 : listView.getChildAt(0).getTop();
-                swipeLayout.setEnabled((topRowVerticalPosition >= 0));
-            }
-        });*/
 
         return rootView;
     }
@@ -198,6 +239,9 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
             this.updateWeather(true, true);
             return true;
         } else if (id == R.id.action_settings) {
+            return true;
+        } else if (id == R.id.action_map) {
+            openPreferredLocationInMap();
             return true;
         }
 
@@ -332,3 +376,85 @@ public class ForecastFragment extends Fragment implements FetchWeatherTask.async
         if (hasToShowLoadingMenu)
             prg.cancel();
 */
+
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        // When tablets rotate, the currently selected list item needs to be saved.
+        // When no item is selected, mPosition will be set to Listview.INVALID_POSITION,
+        // so check for that before storing.
+        if (mPosition != ListView.INVALID_POSITION) {
+            outState.putInt(SELECTED_KEY, mPosition);
+        }
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public Loader<Cursor> onCreateLoader(int i, Bundle bundle) {
+        // This is called when a new Loader needs to be created.  This
+        // fragment only uses one loader, so we don't care about checking the id.
+
+        // To only show current and future dates, filter the query to return weather only for
+        // dates after or including today.
+
+        // Sort order:  Ascending, by date.
+        String sortOrder = WeatherContract.WeatherEntry.COLUMN_DATE + " ASC";
+
+        String locationSetting = Utility.getPreferredLocation(getActivity());
+        Uri weatherForLocationUri = WeatherContract.WeatherEntry.buildWeatherLocationWithStartDate(
+                locationSetting, System.currentTimeMillis());
+
+        return new CursorLoader(getActivity(),
+                weatherForLocationUri,
+                FORECAST_COLUMNS,
+                null,
+                null,
+                sortOrder);
+    }
+
+    @Override
+    public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+        mForecastAdapter.swapCursor(data);
+        if (mPosition != ListView.INVALID_POSITION) {
+            // If we don't need to restart the loader, and there's a desired position to restore
+            // to, do so now.
+            mListView.smoothScrollToPosition(mPosition);
+        }
+    }
+
+    @Override
+    public void onLoaderReset(Loader<Cursor> loader) {
+        mForecastAdapter.swapCursor(null);
+    }
+
+    public void setUseTodayLayout(boolean useTodayLayout) {
+        mUseTodayLayout = useTodayLayout;
+        if (mForecastAdapter != null) {
+            mForecastAdapter.setUseTodayLayout(mUseTodayLayout);
+        }
+    }
+
+    private void openPreferredLocationInMap() {
+        // Using the URI scheme for showing a location found on a map.  This super-handy
+        // intent can is detailed in the "Common Intents" page of Android's developer site:
+        // http://developer.android.com/guide/components/intents-common.html#Maps
+        if ( null != mForecastAdapter ) {
+            Cursor c = mForecastAdapter.getCursor();
+            if ( null != c ) {
+                c.moveToPosition(0);
+                String posLat = c.getString(COL_COORD_LAT);
+                String posLong = c.getString(COL_COORD_LONG);
+                Uri geoLocation = Uri.parse("geo:" + posLat + "," + posLong);
+
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(geoLocation);
+
+                if (intent.resolveActivity(getActivity().getPackageManager()) != null) {
+                    startActivity(intent);
+                } else {
+                    Log.d(LOG_TAG, "Couldn't call " + geoLocation.toString() + ", no receiving apps installed!");
+                }
+            }
+
+        }
+    }
